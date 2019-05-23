@@ -15,7 +15,8 @@ def universal_transformer_gpt_model(
         num_heads: int, transformer_dropout: float = 0.1,
         embedding_dropout: float = 0.6,
         l2_reg_penalty: float = 1e-6,
-        confidence_penalty_weight: float = 0.1):
+        confidence_penalty_weight: float = 0.1,
+        agglomerative_attention: bool = False):
     """
     A model which is similar to the one described by OpenAI in paper
     "Improving Language Understanding by Generative Pre-Training", except
@@ -45,7 +46,8 @@ def universal_transformer_gpt_model(
         name='transformer', num_heads=num_heads,
         residual_dropout=transformer_dropout,
         attention_dropout=transformer_dropout,
-        use_masking=True, vanilla_wiring=False)
+        use_masking=True, vanilla_wiring=False,
+        agglomerative_attention=agglomerative_attention)
     output_softmax_layer = Softmax(name='word_predictions')
 
     next_step_input, embedding_matrix = embedding_layer(word_ids)

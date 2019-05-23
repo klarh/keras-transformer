@@ -218,6 +218,92 @@ class _BaseMultiHeadAttention(Layer):
         return result
 
 
+class _BaseAgglomerativeMultiHeadAttention(_BaseMultiHeadAttention):
+    """
+    Base class for agglomerative Multi-head attention layers
+    """
+    def __init__(self, num_heads: int, use_masking: bool,
+                 dropout: float = 0.0,
+                 **kwargs):
+        """
+        :param num_heads: number of attention heads
+        :param use_masking: when True, forbids the attention to see the further
+          elements in the sequence (particularly important in language
+          modelling).
+        :param dropout: dropout that should be applied to the attention
+          (after the softmax).
+        :param kwargs: any extra arguments typical for a Keras layer,
+          such as name, etc.
+        """
+        self.num_heads = num_heads
+        self.use_masking = use_masking
+        self.dropout = dropout
+        self.compression_window_size = None
+        super(_BaseMultiHeadAttention, self).__init__(**kwargs)
+
+    def get_config(self):
+        config = super().get_config()
+        del config['compression_window_size']
+        config['num_heads'] = self.num_heads
+        config['use_masking'] = self.use_masking
+        config['dropout'] = self.dropout
+        return config
+
+    # noinspection PyAttributeOutsideInit
+    def build_output_params(self, d_model):
+        self.output_weights = self.add_weight(
+            name='output_weights',
+            shape=(d_model, d_model),
+            initializer='glorot_uniform',
+            trainable=True)
+
+    def attention(self, pre_q, pre_k, out_seq_len: int, d_model: int,
+                  training=None):
+        """
+        Calculates the output of the attention once the affine transformations
+        of the inputs are done. Here's the shapes of the arguments:
+        :param pre_q: (batch_size, q_seq_len, num_heads, d_model // num_heads)
+        :param pre_k: (batch_size, k_seq_len, num_heads, d_model // num_heads)
+        :param out_seq_len: the length of the output sequence
+        :param d_model: dimensionality of the model (by the paper)
+        :param training: Passed by Keras. Should not be defined manually.
+          Optional scalar tensor indicating if we're in training
+          or inference phase.
+        """
+        q_seq_len = K.int_shape(pre_q)[-3]
+        k_seq_len = K.int_shape(pre_k)[-3]
+        q_flattened = K.reshape(pre_q, (-1, q_seq_len, d_model))
+        k_flattened = K.reshape(pre_k, (-1, k_seq_len, d_model))
+
+        # projected_k (batch, seq, head, dim)
+        projected_k = K.reshape(
+            K.dot(k_flattened, self.k_projection),
+            (-1, k_seq_len, self.num_heads, d_model//self.num_heads))
+
+        # {q,k}_assignments (batch, seq, head)
+        q_assignments = K.softmax(
+            K.dot(q_flattened, self.q_assign_weights) + self.q_assign_bias)
+        k_assignments = K.softmax(
+            K.dot(k_flattened, self.k_assign_weights) + self.k_assign_bias)
+
+        # k_head_contributions (batch, seq, head, dim)
+        k_head_contributions = projected_k*K.expand_dims(k_assignments, -1)
+        if self.use_masking:
+            k_normalization = K.epsilon() + K.cumsum(k_assignments, -2)
+            # agglomerated_values (batch, seq, head, embedding)
+            agglomerated_values = (K.cumsum(k_head_contributions, -3)/
+                                   K.expand_dims(k_normalization, -1))
+        else:
+            # agglomerated_values (batch, 1, head, embedding)
+            k_normalization = K.epsilon() + K.sum(k_assignments, -2, keepdims=True)
+            agglomerated_values = (K.sum(k_head_contributions, -3, keepdims=True)/
+                                   K.expand_dims(k_normalization, -1))
+
+        result = K.expand_dims(q_assignments, -1)*agglomerated_values
+        result = K.reshape(result, (-1, q_seq_len, d_model))
+        return K.dot(result, self.output_weights)
+
+
 class MultiHeadAttention(_BaseMultiHeadAttention):
     """
     Multi-head attention which can use two inputs:
@@ -330,7 +416,57 @@ class MultiHeadSelfAttention(_BaseMultiHeadAttention):
         return input_shape
 
 
+class MultiHeadAgglomerativeSelfAttention(_BaseAgglomerativeMultiHeadAttention):
+    """
+    Agglomerative multi-head self-attention.
+    """
+
+    # noinspection PyAttributeOutsideInit
+    def build(self, input_shape):
+        if not isinstance(input_shape, tuple):
+            raise ValueError('Invalid input')
+        d_model = input_shape[-1]
+        self.validate_model_dimensionality(d_model)
+
+        self.q_assign_weights = self.add_weight(
+            name='q_assign_weights',
+            shape=(d_model, self.num_heads),
+            initializer='glorot_uniform',
+            trainable=True)
+        self.q_assign_bias = self.add_weight(
+            name='q_assign_bias',
+            shape=(self.num_heads,),
+            initializer='random_normal',
+            trainable=True)
+
+        self.k_projection = self.add_weight(
+            name='k_projection',
+            shape=(d_model, d_model),
+            initializer='glorot_uniform',
+            trainable=True)
+        self.k_assign_weights = self.q_assign_weights
+        self.k_assign_bias = self.q_assign_bias
+
+        self.build_output_params(d_model)
+        return super().build(input_shape)
+
+    def call(self, inputs, **kwargs):
+        if not K.is_tensor(inputs):
+            raise ValueError(
+                'The layer can be called only with one tensor as an argument')
+        _, seq_len, d_model = K.int_shape(inputs)
+        reshaped = K.reshape(
+            inputs, (-1, seq_len, self.num_heads, d_model//self.num_heads))
+        attention_out = self.attention(reshaped, reshaped, seq_len, d_model,
+                                       training=kwargs.get('training'))
+        return attention_out
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+
 get_custom_objects().update({
     'MultiHeadSelfAttention': MultiHeadSelfAttention,
     'MultiHeadAttention': MultiHeadAttention,
+    'MultiHeadAgglomerativeSelfAttention': MultiHeadAgglomerativeSelfAttention,
 })

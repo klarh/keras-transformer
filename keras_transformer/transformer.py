@@ -12,7 +12,8 @@ from keras import initializers
 from keras import backend as K
 from keras.utils import get_custom_objects
 
-from keras_transformer.attention import MultiHeadSelfAttention
+from keras_transformer.attention import (
+    MultiHeadSelfAttention, MultiHeadAgglomerativeSelfAttention)
 
 
 def gelu(x):
@@ -171,11 +172,18 @@ class TransformerBlock:
                  activation: Optional[Union[str, Callable]] = 'gelu',
                  compression_window_size: int = None,
                  use_masking: bool = True,
-                 vanilla_wiring=False):
-        self.attention_layer = MultiHeadSelfAttention(
-            num_heads, use_masking=use_masking, dropout=attention_dropout,
-            compression_window_size=compression_window_size,
-            name=f'{name}_self_attention')
+                 vanilla_wiring=False,
+                 agglomerative_attention: bool = False):
+        if agglomerative_attention:
+            assert compression_window_size is None, 'compression not supported for agglomerative attention'
+            self.attention_layer = MultiHeadAgglomerativeSelfAttention(
+                num_heads, use_masking=use_masking, dropout=attention_dropout,
+                name=f'{name}_self_attention')
+        else:
+            self.attention_layer = MultiHeadSelfAttention(
+                num_heads, use_masking=use_masking, dropout=attention_dropout,
+                compression_window_size=compression_window_size,
+                name=f'{name}_self_attention')
         self.norm1_layer = LayerNormalization(name=f'{name}_normalization1')
         self.dropout_layer = (
             Dropout(residual_dropout, name=f'{name}_dropout')
