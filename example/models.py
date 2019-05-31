@@ -79,7 +79,8 @@ def vanilla_transformer_gpt_model(
         num_heads: int, transformer_dropout: float = 0.1,
         embedding_dropout: float = 0.6,
         l2_reg_penalty: float = 1e-6,
-        confidence_penalty_weight: float = 0.1):
+        confidence_penalty_weight: float = 0.1,
+        agglomerative_attention: bool = False):
     """
     A model which is almost identical to the one described by OpenAI in paper
     "Improving Language Understanding by Generative Pre-Training", except
@@ -116,7 +117,8 @@ def vanilla_transformer_gpt_model(
                 residual_dropout=transformer_dropout,
                 attention_dropout=transformer_dropout,
                 use_masking=True,
-                vanilla_wiring=True)
+                vanilla_wiring=True,
+                agglomerative_attention=agglomerative_attention)
             (next_step_input))
 
     word_predictions = output_softmax_layer(
@@ -140,7 +142,8 @@ def transformer_bert_model(
         num_heads: int,
         transformer_dropout: float = 0.1,
         embedding_dropout: float = 0.6,
-        l2_reg_penalty: float = 1e-4):
+        l2_reg_penalty: float = 1e-4,
+        agglomerative_attention: bool = False):
     """
     Builds a BERT-based model (Bidirectional Encoder Representations
     from Transformers) following paper "BERT: Pre-training of Deep
@@ -190,7 +193,8 @@ def transformer_bert_model(
             residual_dropout=transformer_dropout,
             attention_dropout=transformer_dropout,
             # Allow bi-directional attention
-            use_masking=False)
+            use_masking=False,
+            agglomerative_attention=agglomerative_attention)
 
         act_output = next_step_input
         for i in range(transformer_depth):
@@ -216,7 +220,8 @@ def transformer_bert_model(
                     residual_dropout=transformer_dropout,
                     attention_dropout=transformer_dropout,
                     use_masking=False,  # Allow bi-directional attention
-                    vanilla_wiring=True)
+                    vanilla_wiring=True,
+                    agglomerative_attention=agglomerative_attention)
                 (next_step_input))
 
     word_predictions = output_softmax_layer(

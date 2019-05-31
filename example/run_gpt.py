@@ -159,7 +159,8 @@ def main(model_save_path: str,
                 vocabulary_size=encoder.vocabulary_size(),
                 word_embedding_size=word_embedding_size,
                 transformer_depth=5,
-                num_heads=num_heads)
+                num_heads=num_heads,
+                agglomerative_attention=agglomerative_attention)
             _model.compile(
                 optimizer,
                 loss=losses.sparse_categorical_crossentropy,

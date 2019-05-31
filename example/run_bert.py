@@ -72,7 +72,9 @@ def main(model_save_path: str,
          max_seq_length: int,
          word_embedding_size: int,
          load_weights_only: bool,
-         show_model_summary: bool):
+         show_model_summary: bool,
+         num_heads: int,
+         agglomerative_attention: bool):
     contain_tf_gpu_mem_usage()
     encoder = wikitext.build_wikitext_bpe_encoder(
         special_tokens=BERT_SPECIAL_TOKENS)
@@ -86,7 +88,8 @@ def main(model_save_path: str,
             vocabulary_size=encoder.vocabulary_size(),
             word_embedding_size=word_embedding_size,
             transformer_depth=5,
-            num_heads=8)
+            num_heads=num_heads,
+            agglomerative_attention=agglomerative_attention)
         _model.compile(
             optimizer,
             loss=[
@@ -178,6 +181,9 @@ if __name__ == '__main__':
         '--we-size', type=int, default=512, metavar='INTEGER',
         help='Word embedding size')
     _argparser.add_argument(
+        '--num-heads', type=int, default=8, metavar='INTEGER',
+        help='Number of heads in multi-head attention')
+    _argparser.add_argument(
         '--model', type=str, default='universal', metavar='NAME',
         choices=['universal', 'vanilla'],
         help='The type of the model to train: "vanilla" or "universal"')
@@ -185,6 +191,9 @@ if __name__ == '__main__':
         '--load-weights-only', action='store_true',
         help='Use the save file only to initialize weights '
              '(do not load the whole model)')
+    _argparser.add_argument(
+        '--agglomerative-attention', action='store_true',
+        help='Use agglomerative, rather than standard, attention ')
     _argparser.add_argument(
         '--model-summary', action='store_true',
         help='Display the summary of the model before the training begins')
@@ -199,4 +208,7 @@ if __name__ == '__main__':
          max_seq_length=_args.seq_len,
          word_embedding_size=_args.we_size,
          load_weights_only=_args.load_weights_only,
-         show_model_summary=_args.model_summary)
+         show_model_summary=_args.model_summary,
+         num_heads=_args.num_heads,
+         agglomerative_attention=_args.agglomerative_attention,
+         )
