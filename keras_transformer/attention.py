@@ -289,13 +289,13 @@ class _BaseAgglomerativeMultiHeadAttention(_BaseMultiHeadAttention):
         # k_head_contributions (batch, seq, head, dim)
         k_head_contributions = projected_k*K.expand_dims(k_assignments, -1)
         if self.use_masking:
-            k_normalization = K.epsilon() + K.cumsum(k_assignments, -2)
+            k_normalization = K.clip(K.cumsum(k_assignments, -2), 1e-3, np.inf)
             # agglomerated_values (batch, seq, head, embedding)
             agglomerated_values = (K.cumsum(k_head_contributions, -3)/
                                    K.expand_dims(k_normalization, -1))
         else:
             # agglomerated_values (batch, 1, head, embedding)
-            k_normalization = K.epsilon() + K.sum(k_assignments, -2, keepdims=True)
+            k_normalization = K.clip(K.sum(k_assignments, -2, keepdims=True), 1e-3, np.inf)
             agglomerated_values = (K.sum(k_head_contributions, -3, keepdims=True)/
                                    K.expand_dims(k_normalization, -1))
 
