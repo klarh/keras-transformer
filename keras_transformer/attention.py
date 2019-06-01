@@ -301,6 +301,7 @@ class _BaseAgglomerativeMultiHeadAttention(_BaseMultiHeadAttention):
 
         result = K.expand_dims(q_assignments, -1)*agglomerated_values
         result = K.reshape(result, (-1, q_seq_len, d_model))
+        result = self.apply_dropout_if_needed(result, training=training)
         return K.dot(result, self.output_weights)
 
 
