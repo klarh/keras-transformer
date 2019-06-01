@@ -224,6 +224,7 @@ class _BaseAgglomerativeMultiHeadAttention(_BaseMultiHeadAttention):
     """
     def __init__(self, num_heads: int, use_masking: bool,
                  dropout: float = 0.0,
+                 same_kq_weights: bool = False,
                  **kwargs):
         """
         :param num_heads: number of attention heads
@@ -232,12 +233,15 @@ class _BaseAgglomerativeMultiHeadAttention(_BaseMultiHeadAttention):
           modelling).
         :param dropout: dropout that should be applied to the attention
           (after the softmax).
+        :param same_kq_weights: Use the same classification scheme for both key
+          and query values
         :param kwargs: any extra arguments typical for a Keras layer,
           such as name, etc.
         """
         self.num_heads = num_heads
         self.use_masking = use_masking
         self.dropout = dropout
+        self.same_kq_weights = same_kq_weights
         self.compression_window_size = None
         super(_BaseMultiHeadAttention, self).__init__(**kwargs)
 
@@ -247,6 +251,7 @@ class _BaseAgglomerativeMultiHeadAttention(_BaseMultiHeadAttention):
         config['num_heads'] = self.num_heads
         config['use_masking'] = self.use_masking
         config['dropout'] = self.dropout
+        config['same_kq_weights'] = self.same_kq_weights
         return config
 
     # noinspection PyAttributeOutsideInit
@@ -445,8 +450,20 @@ class MultiHeadAgglomerativeSelfAttention(_BaseAgglomerativeMultiHeadAttention):
             shape=(d_model, d_model),
             initializer='glorot_uniform',
             trainable=True)
-        self.k_assign_weights = self.q_assign_weights
-        self.k_assign_bias = self.q_assign_bias
+        if self.same_kq_weights:
+            self.k_assign_weights = self.q_assign_weights
+            self.k_assign_bias = self.q_assign_bias
+        else:
+            self.k_assign_weights = self.add_weight(
+                name='k_assign_weights',
+                shape=(d_model, self.num_heads),
+                initializer='glorot_uniform',
+                trainable=True)
+            self.k_assign_bias = self.add_weight(
+                name='k_assign_bias',
+                shape=(self.num_heads,),
+                initializer='random_normal',
+                trainable=True)
 
         self.build_output_params(d_model)
         return super().build(input_shape)
